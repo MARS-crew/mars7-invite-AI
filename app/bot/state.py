@@ -28,7 +28,7 @@ class ApplicationFormState(TypedDict):
     age: Optional[str]
     phone_number: Optional[str]
     positions: List[str]
-    resume_summary: Optional[str]
+    motivation: Optional[str]
     initial_motivation: Optional[str]
 
     messages: Annotated[List[BaseMessage], operator.add]
