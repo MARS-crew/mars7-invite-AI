@@ -1,4 +1,5 @@
 import json
+import httpx
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -26,7 +27,7 @@ def process_introduction(state: ApplicationFormState):
     prompt = SystemMessage(content="사용자의 최신 응답에서 이름, 학과, 나이, 전화번호를 추출해. 만약 특정 정보가 언급되지 않았다면, 그 값은 반드시 None으로 남겨둬.")
     extracted_data: UserInfo = intro_extractor.invoke([prompt] + state["messages"])
     user_name = extracted_data.name if extracted_data.name else "지원자"
-    next_question = f"소개 감사합니다, {user_name}님! {CLUB_POSITIONS} 어떤 포지션에 관심 있으신가요? (여러 개 선택 가능해요)"
+    next_question = f"{user_name[-2:]}!, 그렇구나 너는 어떤 포지션에 관심 있니?"
     return {
         "messages": [AIMessage(content=next_question)],
         "name": extracted_data.name,
@@ -42,14 +43,14 @@ def process_position(state: ApplicationFormState):
     try:
         extracted_data: PositionInfo = position_extractor.invoke([prompt] + state["messages"])
         if not extracted_data.positions: raise ValueError("포지션이 선택되지 않음")
-        next_question_text = "좋습니다! 이제 저희 동아리에 지원하게 된 동기를 편하게 말씀해주세요."
+        next_question_text = "좋아! 이제 동아리에 지원하게 된 동기를 편하게 말해줄래?"
         return {
             "messages": [AIMessage(content=next_question_text)],
             "positions": extracted_data.positions,
             "next_question": "process_initial_motivation"
         }
     except Exception as e:
-        retry_message = f"포지션을 제대로 이해하지 못했어요 😥. {CLUB_POSITIONS} 중에서 관심있는 포지션을 다시 말씀해주세요."
+        retry_message = f"포지션을 제대로 이해하지 못어, {CLUB_POSITIONS} 중에서 관심있는 포지션을 다시 말해줘!"
         return {"messages": [AIMessage(content=retry_message)], "next_question": "position"}
 
 
@@ -65,9 +66,7 @@ def process_initial_motivation_node(state: ApplicationFormState):
 
 def qa_session_node(state: ApplicationFormState):
     user_message = state["messages"][-1].content
-    classification: QASessionIntent = intent_classifier_llm.invoke(
-        f"사용자 메시지: '{user_message}'\n\n이 사용자의 의도를 분류하세요. ('종료', '그만', '됐어', '지원서 생성')는 'end_chat', 그 외는 'continue_chat'입니다."
-    )
+    classification: QASessionIntent = intent_classifier_llm.invoke(f"사용자 메시지: '{user_message}'\n\n이 사용자의 의도를 분류하세요. ('종료', '그만', '됐어', '지원서 생성')는 'end_chat', 그 외는 'continue_chat'입니다.")
 
     if classification.intent == "end_chat":
         print("대화 종료 감지됨 (qa_session_node)")
@@ -84,6 +83,7 @@ def qa_session_node(state: ApplicationFormState):
             {CLUB_POSITIONS}
             ---
             사용자가 "종료" 신호를 보내기 전까지 대화를 계속 이어가세요.
+            Markdown 헤더(##), 제목, 이모티콘, 또는 기타 서식을 절대 포함하지 마세요.
             """),
         MessagesPlaceholder(variable_name="history")
     ])
@@ -127,8 +127,8 @@ def generate_resume_node(state: ApplicationFormState):
 
     resume_prompt = f"""
                             # 지시사항
-                            당신은 전문 채용 컨설턴트입니다. 아래 [지원자 정보]와 [지원 동기 및 Q&A 내역]을 바탕으로, 지원자의 강점과 열정이 잘 드러나는 매력적인 이력서 스타일의 프로필을 작성해 주세요. 
-                            [지원 동기 및 Q&A 내역]에 흩어져 있는 지원자의 생각과 질문들을 하나의 통일된 '지원 동기' 스토리로 엮어내는 것이 핵심입니다.
+                            당신은 지원자 본인 입니다. 아래 [지원자 정보]와 [대화 내역]을 바탕으로, 오직 '지원 동기 및 포부'에 대한 문단(paragraph)만 작성해 주세요.
+                            [대화 내역]에 흩어져 있는 지원자의 생각과 질문들을 하나의 통일된 '지원 동기' 스토리로 엮어내는 것이 핵심입니다.
 
                             # [지원자 정보]
                             이름: {info['name']}
@@ -142,18 +142,15 @@ def generate_resume_node(state: ApplicationFormState):
                             # [추가 Q&A 내역] (이후 대화에서 드러난 관심사)
                             {qa_conversation}
 
-                            # 출력 형식 (예시)
-                            이름: {info['name']}
-                            나이: {info['age']}
-                            학과: {info['department']}
-                            연락처: {info['phone_number']}
-                            희망 포지션:{info['positions']}
-                            지원 동기: (여기에 [지원 동기 및 Q&A 내역]을 바탕으로 LLM이 멋지게 스토리를 재구성한 내용)
+                            # 출력 규칙
+                            - 300자 내외로 작성하세요.
+                            - 이름, 학과 등 개인정보를 반복하지 마세요.
+                            - Markdown 헤더(##), 제목, 또는 기타 서식을 절대 포함하지 마세요.
+                            - 오직 '지원 동기 및 포부' 문단 자체만 응답하세요.
                             """
 
     generated_resume = llm.invoke(resume_prompt).content
-
-    resume_summary = generated_resume
+    motivation = generated_resume
 
     profile_data = {
         "name": state.get("name"),
@@ -161,20 +158,31 @@ def generate_resume_node(state: ApplicationFormState):
         "age": state.get("age"),
         "phone_number": state.get("phone_number"),
         "positions": state.get("positions"),
-        "resume_summary": resume_summary
+        "motivation": motivation
     }
 
-    print("\n" + "=" * 30)
-    print("지원서")
-    print("Data:")
-    print(json.dumps(profile_data, indent=2, ensure_ascii=False))
-    print("=" * 30 + "\n")
+    final_message = ""
+    try:
+        submit_url = "https://d1ixjsazi0u8mj.cloudfront.net/submit"
 
-    final_message = f"지원이 완료되었습니다! 감사합니다."
+        print(f"🚀 [전송 시도] Endpoint: {submit_url}\n{profile_data}")
+        response = httpx.post(submit_url, json=profile_data)
+
+        response.raise_for_status()
+
+    except httpx.HTTPStatusError as e:
+        print(f"[전송 실패] 서버가 오류를 반환: {e}")
+        final_message = "프로필 생성에 성공했으나, 최종 제출 서버에 오류가 발생했습니다."
+    except httpx.RequestError as e:
+        print(f"[전송 실패] 서버에 연결할 수 없음: {e}")
+        final_message = "프로필 생성에 성공했으나, 제출 서버에 연결할 수 없습니다."
+    except Exception as e:
+        print(f"[전송 중 알 수 없는 오류]: {e}")
+        final_message = "프로필 생성 또는 제출 중 알 수 없는 오류가 발생했습니다."
 
     return {
         "messages": [AIMessage(content=final_message)],
-        "resume_summary": resume_summary,
+        "motivation": motivation,
         "next_question": "done"
     }
 
