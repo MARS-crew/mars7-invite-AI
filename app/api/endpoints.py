@@ -39,21 +39,10 @@ async def send_chat_message(request: ChatRequest, app=Depends(get_langgraph_app)
     config = {"configurable": {"thread_id": request.session_id}}
 
     try:
-        if request.message.lower() in ['exit', '종료']:
-            current_state: ApplicationFormState = await app.aget_state(config)
-
-            if current_state and current_state.values.get("next_question") == "qa_session":
-                print(f"[{request.session_id}] '종료' 감지, 프로필 생성 시작")
-                await app.ainvoke({"messages": [HumanMessage(content="종료")]}, config=config)
-                response_state = await app.ainvoke({"messages": [HumanMessage(content="")]}, config=config)
-            else:
-                response_state = current_state.values
-
-        else:
-            response_state = await app.ainvoke(
-                {"messages": [HumanMessage(content=request.message)]},
-                config=config
-            )
+        response_state = await app.ainvoke(
+            {"messages": [HumanMessage(content=request.message)]},
+            config=config
+        )
 
         last_message = response_state['messages'][-1].content
         next_step = response_state['next_question']
@@ -63,5 +52,6 @@ async def send_chat_message(request: ChatRequest, app=Depends(get_langgraph_app)
             response_message=last_message,
             next_step=next_step
         )
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"메시지 처리 중 오류 발생: {str(e)}")

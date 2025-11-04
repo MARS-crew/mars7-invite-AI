@@ -24,6 +24,20 @@ def start_node(state: ApplicationFormState):
 
 
 def process_introduction(state: ApplicationFormState):
+    user_message = state["messages"][-1].content
+    user_message_lower = user_message.lower()
+
+    if "스킵" in user_message_lower or "건너뛰기" in user_message_lower:
+        next_question = f"너는 어떤 포지션에 관심 있니?"
+        return {
+            "messages": [AIMessage(content=next_question)],
+            "name": None,
+            "department": None,
+            "age": None,
+            "phone_number": None,
+            "next_question": "position"
+        }
+
     prompt = SystemMessage(content="사용자의 최신 응답에서 이름, 학과, 나이, 전화번호를 추출해. 만약 특정 정보가 언급되지 않았다면, 그 값은 반드시 None으로 남겨둬.")
     extracted_data: UserInfo = intro_extractor.invoke([prompt] + state["messages"])
     user_name = extracted_data.name if extracted_data.name else "지원자"
@@ -39,6 +53,18 @@ def process_introduction(state: ApplicationFormState):
 
 
 def process_position(state: ApplicationFormState):
+    user_message = state["messages"][-1].content
+    user_message_lower = user_message.lower()
+
+    if "스킵" in user_message_lower or "건너뛰기" in user_message_lower:
+        print("[Log] '포지션' 스킵됨.")
+        next_question_text = "동아리에 지원하게 된 동기를 편하게 말해줄래?"
+        return {
+            "messages": [AIMessage(content=next_question_text)],
+            "positions": [],
+            "next_question": "process_initial_motivation"
+        }
+
     prompt = SystemMessage(content=f"사용자의 최신 응답에서 관심있는 포지션 목록을 추출해. 선택지는 {CLUB_POSITIONS}이야.")
     try:
         extracted_data: PositionInfo = position_extractor.invoke([prompt] + state["messages"])
@@ -55,6 +81,17 @@ def process_position(state: ApplicationFormState):
 
 
 def process_initial_motivation_node(state: ApplicationFormState):
+    user_message = state["messages"][-1].content
+    user_message_lower = user_message.lower()
+
+    initial_motivation_text = ""
+
+    if "스킵" in user_message_lower or "skip" in user_message_lower:
+        print("[Log] '지원동기' 스킵됨.")
+        initial_motivation_text = "스킵"
+    else:
+        initial_motivation_text = user_message
+
     ack_message = """이야기해줘서 정말 고마워! 덕분에 네가 어떤 멋진 생각을 하고 있는지 잘 알 수 있었어. 자 이제부터는 내가 너의 질문에 대답해 줄 차례야 우리 동아리에 대해 궁금했던거, 활동은 어떻게 하는지 등 모든지 편하게 물어봐!"""
     initial_motivation_text = state["messages"][-1].content
     return {
@@ -96,7 +133,7 @@ def qa_session_node(state: ApplicationFormState):
 
 
 def generate_resume_node(state: ApplicationFormState):
-    print("🤖 챗봇: 프로필을 생성하고 있습니다...")
+    print("챗봇: 프로필을 생성하고 있습니다...")
 
     info = {
         "name": state.get("name") or "정보 없음",
