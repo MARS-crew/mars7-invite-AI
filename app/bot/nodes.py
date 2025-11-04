@@ -1,5 +1,4 @@
 import json
-import httpx
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -103,7 +102,8 @@ def process_initial_motivation_node(state: ApplicationFormState):
 
 def qa_session_node(state: ApplicationFormState):
     user_message = state["messages"][-1].content
-    classification: QASessionIntent = intent_classifier_llm.invoke(f"사용자 메시지: '{user_message}'\n\n이 사용자의 의도를 분류하세요. ('종료', '그만', '됐어', '지원서 생성')는 'end_chat', 그 외는 'continue_chat'입니다.")
+    classification: QASessionIntent = intent_classifier_llm.invoke(
+        f"사용자 메시지: '{user_message}'\n\n이 사용자의 의도를 분류하세요. ('종료', '그만', '됐어', '지원서 생성')는 'end_chat', 그 외는 'continue_chat'입니다.")
 
     if classification.intent == "end_chat":
         print("대화 종료 감지됨 (qa_session_node)")
@@ -148,7 +148,7 @@ def generate_resume_node(state: ApplicationFormState):
     qa_conversation = ""
     start_index = -1
     for i, msg in enumerate(messages):
-        if "잘 들었습니다!" in msg.content and isinstance(msg, AIMessage):
+        if "이야기해줘서" in msg.content and isinstance(msg, AIMessage):
             start_index = i + 1
             break
     if start_index != -1:
@@ -187,39 +187,20 @@ def generate_resume_node(state: ApplicationFormState):
                             """
 
     generated_resume = llm.invoke(resume_prompt).content
-    motivation = generated_resume
 
-    profile_data = {
-        "name": state.get("name"),
-        "department": state.get("department"),
-        "age": state.get("age"),
-        "phone_number": state.get("phone_number"),
-        "positions": state.get("positions"),
-        "motivation": motivation
-    }
+    parts = generated_resume.split("\n\n", 1)
+    if len(parts) > 1:
+        motivation = parts[1].strip()
+    else:
+        motivation = parts[0].strip()
 
-    final_message = ""
-    try:
-        submit_url = "https://d1ixjsazi0u8mj.cloudfront.net/submit"
-
-        print(f"🚀 [전송 시도] Endpoint: {submit_url}\n{profile_data}")
-        response = httpx.post(submit_url, json=profile_data)
-
-        response.raise_for_status()
-
-    except httpx.HTTPStatusError as e:
-        print(f"[전송 실패] 서버가 오류를 반환: {e}")
-        final_message = "프로필 생성에 성공했으나, 최종 제출 서버에 오류가 발생했습니다."
-    except httpx.RequestError as e:
-        print(f"[전송 실패] 서버에 연결할 수 없음: {e}")
-        final_message = "프로필 생성에 성공했으나, 제출 서버에 연결할 수 없습니다."
-    except Exception as e:
-        print(f"[전송 중 알 수 없는 오류]: {e}")
-        final_message = "프로필 생성 또는 제출 중 알 수 없는 오류가 발생했습니다."
+    resume_summary_text = motivation
+    print(resume_summary_text)
+    final_message = f"대화가 종료되었습니다."
 
     return {
         "messages": [AIMessage(content=final_message)],
-        "motivation": motivation,
+        "motivation": resume_summary_text,
         "next_question": "done"
     }
 

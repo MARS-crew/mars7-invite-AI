@@ -18,7 +18,6 @@ except FileNotFoundError:
     print("서버를 프로젝트 루트 폴더(mars7-invite-AI)에서 실행해야 합니다.")
     exit()
 
-
 CLUB_NAME = club_info.get("clubName", "동아리 이름 없음")
 CLUB_INTRO = club_info.get("introduction", "동아리 소개 없음")
 
