@@ -37,10 +37,12 @@ def process_introduction(state: ApplicationFormState):
             "next_question": "position"
         }
 
-    prompt = SystemMessage(content="사용자의 최신 응답에서 이름, 학과, 나이, 전화번호를 추출해. 만약 특정 정보가 언급되지 않았다면, 그 값은 반드시 None으로 남겨둬.")
+    prompt = SystemMessage(content="사용자의 최신 응답에서 이름, 학과, 나이, 전화번호를 추출해. 만약 특정 정보가 언급되지 않았다면, 그 값은 반드시 None으로 남겨둬. 나이는 반드시 숫자로만 나타내")
     extracted_data: UserInfo = intro_extractor.invoke([prompt] + state["messages"])
-    user_name = extracted_data.name if extracted_data.name else "지원자"
-    next_question = f"{user_name[-2:]}!, 그렇구나 너는 어떤 포지션에 관심 있니?"
+    if extracted_data.name:
+        next_question = f"{extracted_data.name[-2:]}!, 그렇구나 너는 어떤 포지션에 관심 있니?"
+    else:
+        next_question = f"너는 어떤 포지션에 관심 있니?"
     return {
         "messages": [AIMessage(content=next_question)],
         "name": extracted_data.name,
@@ -162,7 +164,33 @@ def generate_resume_node(state: ApplicationFormState):
     if not qa_conversation:
         qa_conversation = "추가 질문 없음"
 
-    resume_prompt = f"""
+    total_input_length = 0
+
+    # "스킵"이나 기본값이 아닌, 실제 사용자 입력만 계산
+    if initial_motivation and initial_motivation.lower() != "스킵":
+        total_input_length += len(initial_motivation)
+
+    if qa_conversation and qa_conversation != "추가 질문 없음":
+        total_input_length += len(qa_conversation)
+
+    print(f"[Log] 총 유효 입력 길이: {total_input_length}")
+
+    motivation_text = None  # <--- [수정] 기본값을 None으로 설정
+    generated_resume = "입력된 내용이 없어 지원 동기가 생성되지 않았습니다."  # 기본값
+
+    # [수정] 입력 길이가 20자 이상일 때만 LLM 호출
+    if total_input_length >= 20:
+        print("[Log] 입력 길이가 충분하여 LLM으로 지원 동기 생성.")
+
+        # 2-1. 동적 출력 규칙 생성
+        dynamic_output_rule = ""
+        if total_input_length < 100:
+            dynamic_output_rule = "- 150자 내외로 요약하여 작성하세요."
+        else:
+            dynamic_output_rule = "- 300자 내외로 풍부하게 작성하세요."
+
+        # 2-2. 프롬프트 정의
+        resume_prompt = f"""
                             # 지시사항
                             당신은 지원자 본인 입니다. 아래 [지원자 정보]와 [대화 내역]을 바탕으로, 오직 '지원 동기 및 포부'에 대한 문단(paragraph)만 작성해 주세요.
                             [대화 내역]에 흩어져 있는 지원자의 생각과 질문들을 하나의 통일된 '지원 동기' 스토리로 엮어내는 것이 핵심입니다.
@@ -173,28 +201,28 @@ def generate_resume_node(state: ApplicationFormState):
                             연락처: {info['phone_number']}
                             희망 포지션: {info['positions']}
 
-                            # [초기 지원 동기] (사용자가 처음에 밝힌 핵심 동기)
+                            # [초기 지원 동기]
                             {initial_motivation}
 
-                            # [추가 Q&A 내역] (이후 대화에서 드러난 관심사)
+                            # [추가 Q&A 내역]
                             {qa_conversation}
 
                             # 출력 규칙
-                            - 300자 내외로 작성하세요.
+                            {dynamic_output_rule}
                             - 이름, 학과 등 개인정보를 반복하지 마세요.
                             - Markdown 헤더(##), 제목, 또는 기타 서식을 절대 포함하지 마세요.
                             - 오직 '지원 동기 및 포부' 문단 자체만 응답하세요.
                             """
 
-    generated_resume = llm.invoke(resume_prompt).content
+        # 2-3. LLM 호출 및 파싱
+        generated_resume = llm.invoke(resume_prompt).content
+        parts = generated_resume.split("\n\n", 1)
+        if len(parts) > 1:
+            motivation_text = parts[1].strip()
+        else:
+            motivation_text = parts[0].strip()
 
-    parts = generated_resume.split("\n\n", 1)
-    if len(parts) > 1:
-        motivation = parts[1].strip()
-    else:
-        motivation = parts[0].strip()
-
-    resume_summary_text = motivation
+    resume_summary_text = motivation_text
     print(resume_summary_text)
     final_message = f"대화가 종료되었습니다."
 
