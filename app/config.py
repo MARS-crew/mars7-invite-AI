@@ -21,7 +21,7 @@ except FileNotFoundError:
 CLUB_NAME = club_info.get("clubName", "동아리 이름 없음")
 CLUB_INTRO = club_info.get("introduction", "동아리 소개 없음")
 
-CLUB_POSITIONS = "기획자, 디자이너, 프론트엔드, 백엔드, AI 포지션"
+CLUB_POSITIONS = "PLANNING, DESIGN, FRONTEND, BACKEND, AI"
 
 data_lines = []
 
