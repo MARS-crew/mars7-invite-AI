@@ -26,7 +26,8 @@ origins = [
     "http://localhost:3000",
     "http://localhost:5173",
     "https://d1ixjsazi0u8mj.cloudfront.net",
-    "https://www.welcome-mars.kro.kr/"
+    "https://www.welcome-mars.kro.kr/",
+    "https://www.welcome-mars.kro.kr"
 ]
 
 app.add_middleware(
